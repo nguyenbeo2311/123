@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate Image Prompt Master - 3D View & Image Ref</title>
+    <style>
+        :root {
+            --primary: #bb86fc;
+            --secondary: #03dac6;
+            --bg: #121212;
+            --surface: #1e1e1e;
+            --input-bg: #2d2d2d;
+            --text: #e0e0e0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 3D Viewer Panel */
+        #viewer-panel {
+            flex: 1;
+            position: relative;
+            background: #000;
+        }
+
+        #3d-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .viewer-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .viewer-overlay h2 { border: none; margin: 0; }
+        .viewer-overlay small { color: #aaa; }
+
+        /* Control Panel */
+        #control-panel {
+            width: 450px;
+            background: var(--surface);
+            padding: 25px;
+            overflow-y: auto;
+            box-shadow: -5px 0 20px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+
+        #control-panel::-webkit-scrollbar { width: 8px; }
+        #control-panel::-webkit-scrollbar-track { background: var(--bg); }
+        #control-panel::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        #control-panel::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+        h1 { color: var(--primary); font-size: 1.5em; margin-top: 0; margin-bottom: 5px; }
+        p.subtitle { color: #888; margin-bottom: 25px; font-size: 0.85em; }
+        
+        h2 {
+            color: var(--secondary);
+            border-bottom: 1px solid #333;
+            padding-bottom: 8px;
+            margin-top: 30px;
+            font-size: 1em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .form-group { display: flex; flex-direction: column; margin-bottom: 15px; }
+        label { margin-bottom: 8px; font-weight: bold; color: var(--primary); font-size: 0.85em; }
+
+        input[type="text"], input[type="number"], textarea, select {
+            background-color: var(--input-bg);
+            color: var(--text);
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 10px;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .slider-container { display: flex; align-items: center; gap: 10px; }
+        input[type="range"] { flex-grow: 1; accent-color: var(--secondary); }
+        output { min-width: 40px; text-align: right; font-family: monospace; color: var(--secondary); font-size: 13px; }
+
+        .color-palette-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            transition: opacity 0.3s ease;
+        }
+        
+        input[type="color"] {
+            -webkit-appearance: none;
+            border: none;
+            width: 100%;
+            height: 40px;
+            border-radius: 6px;
+            cursor: pointer;
+            padding: 0;
+            background: none;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: 1px solid #444; border-radius: 6px; }
+
+        .result-box { margin-top: 30px; background: #1a1a1a; padding: 15px; border-radius: 8px; border: 1px dashed var(--primary); }
+        #finalPrompt { width: 100%; background: transparent; border: none; color: #aff; font-family: 'Courier New', monospace; font-size: 13px; resize: none; min-height: 140px; }
+
+        .action-buttons { display: flex; gap: 10px; margin-top: 20px; }
+        button { flex: 1; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: transform 0.2s; }
+        #generateBtn { background-color: var(--primary); color: #121212; }
+        #copyBtn { background-color: var(--secondary); color: #121212; }
+        button:active { transform: scale(0.98); }
+        small { color: #777; margin-top: 4px; font-size: 0.75em; }
+
+        @media (max-width: 900px) {
+            body { flex-direction: column; overflow: auto; height: auto; }
+            #viewer-panel { height: 50vh; width: 100%; flex: none; }
+            #control-panel { width: 100%; box-sizing: border-box; }
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+<div id="viewer-panel">
+    <div class="viewer-overlay">
+        <h2>Live 3D Preview</h2>
+        <small>Dùng chuột để xoay (Trái), Di chuyển (Phải), Cuộn (Zoom)</small>
+    </div>
+    <div id="3d-canvas"></div>
+</div>
+
+<div id="control-panel">
+    <h1>🎨 Prompt Master Advanced</h1>
+    <p class="subtitle">3D Camera, Lighting, Rim Light, Color & Image Ref</p>
+
+    <h2>1. Image Reference & Core Content</h2>
+    <div class="form-group">
+        <label>Product Image URL (Optional)</label>
+        <input type="text" id="imgUrl" placeholder="https://example.com/product-box.jpg">
+        <small>Link hình ảnh trực tiếp (.jpg, .png)</small>
+    </div>
+    <div class="form-group">
+        <label>Image Weight (--iw)</label>
+        <div class="slider-container">
+            <input type="range" id="imgWeight" min="0" max="3" step="0.1" value="1" oninput="this.nextElementSibling.value = this.value">
+            <output>1</output>
+        </div>
+        <small>0.5: Tham khảo nhẹ | 2.0: Bám sát hình gốc</small>
+    </div>
+
+    <div class="form-group">
+        <label>Subject Details</label>
+        <textarea id="subject" placeholder="e.g., A minimalist geometric product box floating..."></textarea>
+    </div>
+    
+    <div class="form-group">
+        <label>Camera Lens (Focal Length)</label>
+        <select id="lens" onchange="updateUIto3D()">
+            <option value="8mm circular fisheye lens" data-fov="140">8mm Fisheye (Hiệu ứng mắt cá/Méo cong)</option>
+            <option value="14mm ultra-wide lens" data-fov="114">14mm Ultra-wide (Góc siêu rộng/Kịch tính)</option>
+            <option value="24mm wide-angle lens" data-fov="84">24mm Wide-angle (Góc rộng/Động năng)</option>
+            <option value="35mm prime lens" data-fov="63">35mm Prime (Góc nhìn kể chuyện/Lifestyle)</option>
+            <option selected value="50mm prime lens" data-fov="46">50mm Prime (Mắt người/Tự nhiên)</option>
+            <option value="85mm telephoto lens" data-fov="28">85mm Telephoto (Chân dung/Xoá phông)</option>
+            <option value="100mm macro lens" data-fov="24">100mm Macro (Cận cảnh/Đặc tả chi tiết)</option>
+            <option value="200mm telephoto lens" data-fov="12">200mm Super Telephoto (Nén không gian/Phẳng)</option>
+        </select>
+        <small>Chọn Lens sẽ thay đổi độ méo (FOV) trên demo 3D.</small>
+    </div>
+    <h2>2. Camera Geometry</h2>
+    <div class="form-group">
+        <label>Camera Tilt (Vertical Angle)</label>
+        <div class="slider-container">
+            <input type="range" id="tilt" min="-89" max="89" value="15" oninput="updateUIto3D()">
+            <output id="tilt-out">15°</output>
+        </div>
+        <small>-45°: Bottom-up | 0°: Eye Level | 45°: Top-down</small>
+    </div>
+    <div class="form-group">
+        <label>Camera Azimuth (Horizontal Pan)</label>
+        <div class="slider-container">
+            <input type="range" id="azimuth" min="-180" max="180" value="45" oninput="updateUIto3D()">
+            <output id="azimuth-out">45°</output>
+        </div>
+    </div>
+    <div class="form-group">
+        <label>Camera Distance</label>
+        <div class="slider-container">
+            <input type="range" id="cam_dist" min="50" max="600" value="250" oninput="updateUIto3D()">
+            <output id="dist-out">250</output>
+        </div>
+    </div>
+    <div class="form-group">
+        <label>Camera Height Target Y</label>
+        <div class="slider-container">
+            <input type="range" id="cam_height" min="0" max="200" value="30" oninput="updateUIto3D()">
+            <output id="height-out">30</output>
+        </div>
+    </div>
+
+    <h2>3. Color Grading & Palette</h2>
+    <div class="form-group">
+        <label>Color Tone / Mood</label>
+        <select id="colorTone">
+            <option value="vibrant and highly saturated colors">Vibrant & Saturated</option>
+            <option value="natural and realistic color grading">Natural & Realistic</option>
+            <option value="muted and desaturated tones">Muted & Desaturated</option>
+            <option value="soft pastel color palette">Pastel & Soft</option>
+            <option value="dark, moody, and atmospheric">Dark & Moody</option>
+            <option value="cinematic high contrast color grading">Cinematic High Contrast</option>
+        </select>
+    </div>
+    
+    <div class="form-group">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label style="margin: 0;">Main Color Palette</label>
+            <div style="display: flex; align-items: center; gap: 5px; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px;">
+                <input type="checkbox" id="noColorPalette" onchange="document.getElementById('palette-wrapper').style.opacity = this.checked ? '0.3' : '1';">
+                <label for="noColorPalette" style="margin: 0; color: var(--secondary); font-size: 0.75em; cursor: pointer;">No Color (Giữ màu gốc)</label>
+            </div>
+        </div>
+        <div class="color-palette-container" id="palette-wrapper">
+            <input type="color" id="palette1" value="#bb86fc" oninput="updateUIto3D()" title="Primary Color (Applies to 3D)">
+            <input type="color" id="palette2" value="#03dac6" title="Secondary Color">
+            <input type="color" id="palette3" value="#ffb74d" title="Accent Color 1">
+            <input type="color" id="palette4" value="#cf6679" title="Accent Color 2">
+        </div>
+    </div>
+
+    <h2>4. Detailed Lighting</h2>
+    <div class="form-group">
+        <label>Color Temperature (Kelvin)</label>
+        <div class="slider-container">
+            <input type="range" id="kelvin" min="1000" max="12000" step="100" value="5600" oninput="updateUIto3D()">
+            <output id="kelvin-out">5600 K</output>
+        </div>
+    </div>
+    <div class="form-group">
+        <label>Ambient Light</label>
+        <div class="slider-container">
+            <input type="range" id="ambientIntensity" min="0" max="2" step="0.1" value="0.4" oninput="updateUIto3D()">
+            <output id="ambientIntensity-out">0.4</output>
+        </div>
+        <input type="color" id="ambientColor" value="#ffffff" oninput="updateUIto3D()" style="margin-top: 5px; height: 30px;">
+    </div>
+    <div class="form-group">
+        <label>Key Light (Directional)</label>
+        <div class="slider-container">
+            <input type="range" id="dirIntensity" min="0" max="5" step="0.1" value="1" oninput="updateUIto3D()">
+            <output id="dirIntensity-out">1</output>
+        </div>
+        <input type="color" id="dirColor" value="#ffffff" oninput="updateUIto3D()" style="margin-top: 5px; height: 30px;">
+    </div>
+    <div class="form-group">
+        <div class="slider-container">
+            <small>Tilt:</small><input type="range" id="dirTilt" min="-90" max="90" value="45" oninput="updateUIto3D()">
+            <small>Azimuth:</small><input type="range" id="dirAzimuth" min="-180" max="180" value="45" oninput="updateUIto3D()">
+        </div>
+    </div>
+
+    <h2>5. Advanced Lighting (Rim Light)</h2>
+    <div class="form-group">
+        <label>Rim Light Settings</label>
+        <div class="slider-container">
+            <input type="range" id="rimIntensity" min="0" max="5" step="0.1" value="0.8" oninput="updateUIto3D()">
+            <output id="rimIntensity-out">0.8</output>
+        </div>
+        <input type="color" id="rimColor" value="#bb86fc" oninput="updateUIto3D()" style="margin-top: 5px; height: 30px;">
+    </div>
+    <div class="form-group">
+        <div class="slider-container">
+            <small>Tilt:</small><input type="range" id="rimTilt" min="-90" max="90" value="30" oninput="updateUIto3D()">
+            <small>Azimuth:</small><input type="range" id="rimAzimuth" min="-180" max="180" value="-135" oninput="updateUIto3D()">
+        </div>
+    </div>
+    <div class="form-group" style="flex-direction: row; gap: 10px; align-items: center;">
+        <input type="checkbox" id="showHelpers" onchange="updateUIto3D()">
+        <label style="margin: 0;">Hiển thị tia sáng</label>
+    </div>
+
+    <div class="form-group" style="margin-top: 20px;">
+        <label>Aspect Ratio</label>
+        <select id="ratio">
+            <option value="--ar 16:9">16:9 (Cinematic/KV)</option>
+            <option value="--ar 9:16">9:16 (Story)</option>
+            <option value="--ar 4:5">4:5 (Portrait)</option>
+            <option value="--ar 1:1">1:1 (Square)</option>
+        </select>
+    </div>
+
+    <div class="result-box">
+        <label>Generated Prompt</label>
+        <textarea id="finalPrompt" readonly></textarea>
+    </div>
+    <div class="action-buttons">
+        <button id="generateBtn" onclick="generate()">Generate Prompt</button>
+        <button id="copyBtn" onclick="copy()">Copy</button>
+    </div>
+</div>
+
+<script>
+    // --- THREE.JS SETUP ---
+    let scene, camera, renderer, controls;
+    let isUpdatingFrom3D = false;
+    let ambientLight, dirLight, dirLightHelper, dirLightTargetHelper;
+    let rimLight, rimLightHelper, rimLightTargetHelper;
+    let subject; 
+
+    const elTilt = document.getElementById('tilt');
+    const elAzimuth = document.getElementById('azimuth');
+    const elDist = document.getElementById('cam_dist');
+    const elHeight = document.getElementById('cam_height');
+    const elLens = document.getElementById('lens');
+
+    const elAmbientIntensity = document.getElementById('ambientIntensity');
+    const elAmbientColor = document.getElementById('ambientColor');
+    const elDirIntensity = document.getElementById('dirIntensity');
+    const elDirColor = document.getElementById('dirColor');
+    const elDirTilt = document.getElementById('dirTilt');
+    const elDirAzimuth = document.getElementById('dirAzimuth');
+    const elShowHelpers = document.getElementById('showHelpers');
+
+    const elRimIntensity = document.getElementById('rimIntensity');
+    const elRimColor = document.getElementById('rimColor');
+    const elRimTilt = document.getElementById('rimTilt');
+    const elRimAzimuth = document.getElementById('rimAzimuth');
+
+    const elKelvin = document.getElementById('kelvin');
+    const elPalette1 = document.getElementById('palette1');
+
+    function init3D() {
+        const container = document.getElementById('viewer-panel');
+        
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
+        scene.fog = new THREE.Fog(0x1a1a1a, 200, 1000);
+
+        camera = new THREE.PerspectiveCamera(46, container.clientWidth / container.clientHeight, 1, 2000);
+        
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.shadowMap.enabled = true;
+        document.getElementById('3d-canvas').appendChild(renderer.domElement);
+
+        const geometry = new THREE.BoxGeometry(40, 60, 40);
+        const material = new THREE.MeshStandardMaterial({ 
+            color: elPalette1.value, 
+            roughness: 0.3, 
+            metalness: 0.2 
+        });
+        subject = new THREE.Mesh(geometry, material);
+        subject.position.y = 30;
+        subject.castShadow = true;
+        scene.add(subject);
+
+        const sphereGeo = new THREE.SphereGeometry(15, 32, 32);
+        const sphereMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+        const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+        sphere.position.set(40, 15, 20);
+        sphere.castShadow = true;
+        scene.add(sphere);
+
+        const planeGeo = new THREE.PlaneGeometry(1000, 1000);
+        const planeMat = new THREE.MeshStandardMaterial({ color: 0x222222, depthWrite: false });
+        const plane = new THREE.Mesh(planeGeo, planeMat);
+        plane.rotation.x = - Math.PI / 2;
+        plane.receiveShadow = true;
+        scene.add(plane);
+
+        const grid = new THREE.GridHelper(1000, 100, 0x444444, 0x222222);
+        scene.add(grid);
+
+        ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+
+        dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        dirLightHelper = new THREE.DirectionalLightHelper(dirLight, 10);
+        dirLightHelper.visible = false;
+        scene.add(dirLightHelper);
+
+        dirLightTargetHelper = new THREE.Object3D();
+        scene.add(dirLightTargetHelper);
+        dirLight.target = dirLightTargetHelper;
+
+        rimLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        rimLight.castShadow = true;
+        scene.add(rimLight);
+
+        rimLightHelper = new THREE.DirectionalLightHelper(rimLight, 10);
+        rimLightHelper.visible = false;
+        scene.add(rimLightHelper);
+
+        rimLightTargetHelper = new THREE.Object3D();
+        scene.add(rimLightTargetHelper);
+        rimLight.target = rimLightTargetHelper;
+
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 + 0.2;
+        controls.addEventListener('change', update3DtoUI);
+
+        updateUIto3D();
+        window.addEventListener('resize', onWindowResize, false);
+        animate();
+    }
+
+    function updateUIto3D() {
+        if (isUpdatingFrom3D) return;
+
+        if (subject) subject.material.color.set(elPalette1.value);
+
+        const dist = parseFloat(elDist.value);
+        const azimuth = parseFloat(elAzimuth.value);
+        const tilt = parseFloat(elTilt.value);
+        const heightTarget = parseFloat(elHeight.value);
+
+        document.getElementById('dist-out').value = dist;
+        document.getElementById('azimuth-out').value = azimuth + '°';
+        document.getElementById('tilt-out').value = tilt + '°';
+        document.getElementById('height-out').value = heightTarget;
+
+        const selectedOption = elLens.options[elLens.selectedIndex];
+        camera.fov = parseFloat(selectedOption.getAttribute('data-fov'));
+        camera.updateProjectionMatrix();
+
+        const phi = THREE.MathUtils.degToRad(90 - tilt);
+        const theta = THREE.MathUtils.degToRad(azimuth);
+        camera.position.setFromSphericalCoords(dist, phi, theta);
+        
+        controls.target.set(0, heightTarget, 0);
+        camera.position.y += heightTarget;
+        
+        ambientLight.intensity = parseFloat(elAmbientIntensity.value);
+        ambientLight.color.set(elAmbientColor.value);
+        document.getElementById('ambientIntensity-out').value = elAmbientIntensity.value;
+
+        dirLight.intensity = parseFloat(elDirIntensity.value);
+        dirLight.color.set(elDirColor.value);
+        document.getElementById('dirIntensity-out').value = elDirIntensity.value;
+
+        const dirPhi = THREE.MathUtils.degToRad(90 - parseFloat(elDirTilt.value));
+        const dirTheta = THREE.MathUtils.degToRad(parseFloat(elDirAzimuth.value));
+        dirLight.position.setFromSphericalCoords(200, dirPhi, dirTheta);
+
+        rimLight.intensity = parseFloat(elRimIntensity.value);
+        rimLight.color.set(elRimColor.value);
+        document.getElementById('rimIntensity-out').value = elRimIntensity.value;
+
+        const rimPhi = THREE.MathUtils.degToRad(90 - parseFloat(elRimTilt.value));
+        const rimTheta = THREE.MathUtils.degToRad(parseFloat(elRimAzimuth.value));
+        rimLight.position.setFromSphericalCoords(200, rimPhi, rimTheta);
+
+        dirLightHelper.visible = elShowHelpers.checked;
+        rimLightHelper.visible = elShowHelpers.checked;
+        document.getElementById('kelvin-out').value = elKelvin.value + ' K';
+
+        controls.update();
+    }
+
+    function update3DtoUI() {
+        isUpdatingFrom3D = true;
+        const relativePos = new THREE.Vector3().subVectors(camera.position, controls.target);
+        const spherical = new THREE.Spherical().setFromVector3(relativePos);
+
+        const dist = Math.round(spherical.radius);
+        const tilt = Math.round(90 - THREE.MathUtils.radToDeg(spherical.phi));
+        let azimuth = Math.round(THREE.MathUtils.radToDeg(spherical.theta));
+        
+        elDist.value = dist;
+        elTilt.value = tilt;
+        elAzimuth.value = azimuth;
+        elHeight.value = Math.round(controls.target.y);
+
+        document.getElementById('dist-out').value = dist;
+        document.getElementById('azimuth-out').value = azimuth + '°';
+        document.getElementById('tilt-out').value = tilt + '°';
+        document.getElementById('height-out').value = Math.round(controls.target.y);
+
+        isUpdatingFrom3D = false;
+    }
+
+    function onWindowResize() {
+        const container = document.getElementById('viewer-panel');
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+        if(dirLightHelper) dirLightHelper.update();
+        if(rimLightHelper) rimLightHelper.update();
+    }
+
+    // --- PROMPT GENERATION LOGIC ---
+    function generate() {
+        const imgUrl = document.getElementById('imgUrl').value.trim();
+        const imgWeight = document.getElementById('imgWeight').value;
+        const subjectTxt = document.getElementById('subject').value.trim() || "A geometric product shot";
+        
+        const lens = document.getElementById('lens').value;
+        const ratio = document.getElementById('ratio').value;
+        const tilt = elTilt.value;
+        const azim = elAzimuth.value;
+        const dist = elDist.value;
+        
+        const tone = document.getElementById('colorTone').value;
+        const noColorPalette = document.getElementById('noColorPalette').checked;
+        const c1 = document.getElementById('palette1').value;
+        const c2 = document.getElementById('palette2').value;
+        const c3 = document.getElementById('palette3').value;
+        const c4 = document.getElementById('palette4').value;
+
+        const ambientIntensity = elAmbientIntensity.value;
+        const ambientColor = elAmbientColor.value;
+        const dirIntensity = elDirIntensity.value;
+        const dirColor = elDirColor.value;
+        const dirTilt = elDirTilt.value;
+        const dirAzimuth = elDirAzimuth.value;
+        const rimIntensity = elRimIntensity.value;
+        const rimColor = elRimColor.value;
+        const rimTilt = elRimTilt.value;
+        const rimAzimuth = elRimAzimuth.value;
+        const kelvin = elKelvin.value;
+
+        let angleText = "";
+        if(tilt > 30) angleText = "high angle shot, looking down";
+        else if(tilt < -10) angleText = "low angle hero shot, looking up";
+        else angleText = "eye-level straight on shot";
+
+        let parts = [];
+        parts.push(subjectTxt);
+        parts.push(angleText);
+        parts.push(lens);
+        
+        parts.push(`color_grading: ${tone}`);
+        
+        if (!noColorPalette) {
+            parts.push(`color_palette: ${c1}, ${c2}, ${c3}, ${c4}`);
+        }
+        
+        const cameraTechnicalString = `camera_tilt: ${tilt}deg, camera_azimuth: ${azim}deg, camera_distance: ${dist}cm`;
+        parts.push(cameraTechnicalString);
+
+        const lightingTechnicalString = `ambient_intensity: ${ambientIntensity}, ambient_color: ${ambientColor}, key_light_intensity: ${dirIntensity}, key_light_color: ${dirColor}, key_light_tilt: ${dirTilt}deg, key_light_azimuth: ${dirAzimuth}deg, rim_light_intensity: ${rimIntensity}, rim_light_color: ${rimColor}, rim_light_tilt: ${rimTilt}deg, rim_light_azimuth: ${rimAzimuth}deg, color_temperature: ${kelvin}K`;
+        parts.push(lightingTechnicalString);
+
+        parts.push("commercial photography, studio quality, octane render, 8k");
+
+        let finalPromptStr = "";
+        if (imgUrl) {
+            finalPromptStr += imgUrl + " ";
+        }
+        
+        finalPromptStr += parts.join(', ');
+        finalPromptStr += " " + ratio;
+        
+        if (imgUrl) {
+            finalPromptStr += " --iw " + imgWeight;
+        }
+
+        document.getElementById('finalPrompt').value = finalPromptStr;
+    }
+
+    function copy() {
+        const text = document.getElementById('finalPrompt');
+        if (!text.value) return;
+        text.select();
+        navigator.clipboard.writeText(text.value);
+        const btn = document.getElementById('copyBtn');
+        const originalText = btn.innerText;
+        btn.innerText = "✓ Copied!";
+        btn.style.backgroundColor = "#4caf50";
+        setTimeout(() => { 
+            btn.innerText = originalText; 
+            btn.style.backgroundColor = "var(--secondary)";
+        }, 2000);
+    }
+
+    window.onload = init3D;
+</script>
+
+</body>
+</html>
